@@ -1,0 +1,16 @@
+# docker-compose.yml
+
+#version: '3.8'
+
+services:
+  # Define our API service
+  cpp-api:
+    # Use a custom name for the container
+    container_name: my_cpp_api
+    # Build the image from the Dockerfile in the current directory
+    build: .
+    # Map port 8080 on the host machine to port 18080 in the container
+    ports:
+      - "8080:18080"
+    # Restart the container automatically if it stops
+    restart: unless-stopped
