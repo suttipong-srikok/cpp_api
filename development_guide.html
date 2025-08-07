@@ -1,41 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C++ REST API Development Guide</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        code {
+            background-color: #e8e8e8;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        }
+        pre {
+            background-color: #2d2d2d;
+            color: #f1f1f1;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+        .file-block {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .file-header {
+            background-color: #f0f0f0;
+            padding: 10px;
+            font-weight: bold;
+            border-bottom: 1px solid #ddd;
+        }
+        .file-content {
+            padding: 15px;
+        }
+        .note {
+            background-color: #e7f3fe;
+            border-left: 6px solid #2196F3;
+            padding: 15px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Complete Development Guide: C++ REST API with SQLite, Redis, spdlog, and JWT</h1>
+
+    <p>This guide provides a comprehensive walkthrough for building a simple, yet fully functional, C++ RESTful API from the ground up. We'll be using the <a href="https://github.com/CrowCpp/Crow" target="_blank">Crow C++ micro-framework</a>, a SQLite database for persistence, Redis for caching and messaging, spdlog for structured logging, and jwt-cpp for JWT-based authentication, and containerizing the entire application with Docker.</p>
+
+    <h2>1. Prerequisites</h2>
+    <p>Before you begin, ensure you have the following tools installed on your system:</p>
+    <ul>
+        <li><a href="https://docs.docker.com/get-docker/" target="_blank">Docker</a>: For containerizing our application.</li>
+        <li><a href="https://docs.docker.com/compose/install/" target="_blank">Docker Compose</a>: For simplifying multi-container Docker applications.</li>
+    </ul>
+
+    <h2>2. Project Structure</h2>
+    <p>First, let's create our project directory and the necessary files. The final structure will look like this:</p>
+    <pre><code>
+. 
+├── docker-compose.yml
+├── Dockerfile
+├── .gitignore
+└── src/ 
+    └── main.cpp
+    </code></pre>
+
+    <h2>3. Creating the Project Files</h2>
+
+    <p>Let's create each file one by one.</p>
+
+    <div class="file-block">
+        <div class="file-header"><code>.gitignore</code></div>
+        <div class="file-content">
+            <p>Create a <code>.gitignore</code> file to prevent build artifacts and other unnecessary files from being committed to version control.</p>
+            <pre><code>
+# Build artifacts
+build/
+*.o
+*.out
+api
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Logs
+logs/
+
+# Database
+database/
+            </code></pre>
+        </div>
+    </div>
+
+    <div class="file-block">
+        <div class="file-header"><code>src/main.cpp</code></div>
+        <div class="file-content">
+            <p>This is the heart of our application. It contains the C++ code for our API server, including the SQLite, Redis, spdlog, and JWT integration.</p>
+            <pre><code class="language-cpp">
 // src/main.cpp
 
-#include "utils.h"
-#include <hiredis/hiredis.h>
-#include <sqlite3.h>
-#include <string>
-#include <memory>
-#include <vector>
+#include "Crow/include/crow.h"
+#include &lt;hiredis/hiredis.h&gt;
+#include &lt;sqlite3.h&gt;
+#include &lt;string&gt;
+#include &lt;memory&gt;
+#include &lt;vector&gt;
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/basic_file_sink.h"
 #include "jwt-cpp/jwt.h"
-#include <sodium.h>
+#include &lt;sodium.h&gt;
 
-// Define custom deleters for the smart pointers
-using RedisContextDeleter = void(*)(redisContext*);
-using Sqlite3Deleter = int(*)(sqlite3*);
+// Define a struct to hold our user data
+struct User {
+    int id;
+    std::string name;
+    std::string email;
+    std::string password;
+};
+
+// Helper function to convert a User struct to a crow::json::wvalue
+crow::json::wvalue user_to_json(const User& user) {
+    crow::json::wvalue json_user;
+    json_user["id"] = user.id;
+    json_user["name"] = user.name;
+    json_user["email"] = user.email;
+    return json_user;
+}
 
 // RAII wrapper for redisContext
-std::unique_ptr<redisContext, RedisContextDeleter> new_redis_context() {
+std::unique_ptr&lt;redisContext, decltype(&redisFree)&gt; new_redis_context() {
     const char* redis_host = std::getenv("REDIS_HOST");
     if (!redis_host) {
         redis_host = "127.0.0.1";
     }
-    return std::unique_ptr<redisContext, RedisContextDeleter>(
+    return std::unique_ptr&lt;redisContext, decltype(&redisFree)&gt;(
         redisConnect(redis_host, 6379),
-        &redisFree
+        redisFree
     );
 }
 
 // RAII wrapper for sqlite3
-std::unique_ptr<sqlite3, Sqlite3Deleter> new_sqlite_connection() {
+std::unique_ptr&lt;sqlite3, decltype(&sqlite3_close)&gt; new_sqlite_connection() {
     sqlite3* db;
     if (sqlite3_open("database/users.db", &db)) {
-        return std::unique_ptr<sqlite3, Sqlite3Deleter>(nullptr, &sqlite3_close);
+        return std::unique_ptr&lt;sqlite3, decltype(&sqlite3_close)&gt;(nullptr, &sqlite3_close);
     }
-    return std::unique_ptr<sqlite3, Sqlite3Deleter>(
+    return std::unique_ptr&lt;sqlite3, decltype(&sqlite3_close)&gt;(
         db,
-        &sqlite3_close
+        sqlite3_close
     );
 }
 
@@ -53,11 +183,6 @@ struct JwtMiddleware {
     struct context {};
 
     void before_handle(crow::request& req, crow::response& res, context& ctx) {
-        // Allow access to registration and login pages without a token
-        if (req.url == "/register" || req.url == "/login") {
-            return;
-        }
-
         auto auth_header = req.get_header_value("Authorization");
         if (auth_header.empty() || auth_header.rfind("Bearer ", 0) != 0) {
             res.code = 401;
@@ -84,8 +209,7 @@ struct JwtMiddleware {
 int main()
 {
     if (sodium_init() < 0) {
-        // Using cerr because logger might not be initialized
-        fprintf(stderr, "Failed to initialize libsodium\n");
+        spdlog::error("Failed to initialize libsodium");
         return 1;
     }
 
@@ -108,7 +232,7 @@ int main()
         spdlog::error("Failed to open database");
     }
 
-    crow::App<JwtMiddleware> app;
+    crow::App&lt;JwtMiddleware&gt; app;
 
     // --- AUTHENTICATION ---
     CROW_ROUTE(app, "/register").methods("POST"_method)
@@ -204,7 +328,7 @@ int main()
             .set_type("JWS")
             .set_payload_claim("user_id", jwt::claim(std::to_string(user_id)))
             .set_expires_at(std::chrono::system_clock::now() + std::chrono::seconds{3600})
-            .sign(jwt::algorithm::hs256{app.get_middleware<JwtMiddleware>().jwt_secret});
+            .sign(jwt::algorithm::hs256{app.get_middleware&lt;JwtMiddleware&gt;().jwt_secret});
 
         crow::json::wvalue res_body;
         res_body["token"] = token;
@@ -213,6 +337,7 @@ int main()
 
     // --- PROTECTED ROUTES ---
     CROW_ROUTE(app, "/users").methods("GET"_method)
+    .CROW_MIDDLEWARES(app, JwtMiddleware)
     ([](){
         auto db = new_sqlite_connection();
         if (!db) {
@@ -224,7 +349,7 @@ int main()
         const char* sql = "SELECT id, name, email FROM users;";
         sqlite3_prepare_v2(db.get(), sql, -1, &stmt, 0);
 
-        std::vector<crow::json::wvalue> json_users;
+        std::vector&lt;crow::json::wvalue&gt; json_users;
         while (sqlite3_step(stmt) == SQLITE_ROW) {
             User user;
             user.id = sqlite3_column_int(stmt, 0);
@@ -239,6 +364,7 @@ int main()
     });
 
     CROW_ROUTE(app, "/users/<int>").methods("GET"_method)
+    .CROW_MIDDLEWARES(app, JwtMiddleware)
     ([](int user_id){
         // Try to get user from Redis cache first
         auto redis = new_redis_context();
@@ -288,6 +414,7 @@ int main()
     });
 
     CROW_ROUTE(app, "/users/<int>").methods("PUT"_method)
+    .CROW_MIDDLEWARES(app, JwtMiddleware)
     ([](const crow::request& req, int user_id){
         auto body = crow::json::load(req.body);
         if (!body) {
@@ -336,6 +463,7 @@ int main()
     });
 
     CROW_ROUTE(app, "/users/<int>").methods("DELETE"_method)
+    .CROW_MIDDLEWARES(app, JwtMiddleware)
     ([](int user_id){
         auto db = new_sqlite_connection();
         if (!db) {
@@ -417,6 +545,7 @@ int main()
         return crow::response(404, "{\"message\": \"No messages in queue\"}");
     });
 
+
     // Configure and run the server
     app.port(18080)
        .multithreaded()
@@ -424,3 +553,143 @@ int main()
 
     return 0;
 }
+            </code></pre>
+        </div>
+    </div>
+
+    <div class="file-block">
+        <div class="file-header"><code>Dockerfile</code></div>
+        <div class="file-content">
+            <p>The <code>Dockerfile</code> now includes the installation of the <code>hiredis</code>, <code>sqlite3</code>, <code>spdlog</code>, <code>jwt-cpp</code>, and <code>libsodium</code> libraries.</p>
+            <pre><code class="language-dockerfile">
+# Dockerfile
+
+# ---- Stage 1: The Builder ----
+FROM gcc:latest AS builder
+
+WORKDIR /app
+
+# Install dependencies, including the hiredis, sqlite3, spdlog, jwt-cpp, and libsodium client
+RUN apt-get update && apt-get install -y cmake git libasio-dev libboost-system-dev libhiredis-dev libsqlite3-dev libssl-dev libsodium-dev
+
+RUN git clone https://github.com/CrowCpp/Crow.git
+RUN git clone https://github.com/gabime/spdlog.git
+RUN git clone https://github.com/Thalhammer/jwt-cpp.git
+
+COPY src/main.cpp .
+
+# Compile the application, linking against hiredis, sqlite3, ssl, crypto, and sodium
+RUN g++ -I Crow/include -I spdlog/include -I jwt-cpp/include -o api main.cpp -lpthread -lboost_system -static-libstdc++ -lhiredis -lsqlite3 -lssl -lcrypto -lsodium
+
+# ---- Stage 2: The Final Image ----
+FROM debian:stable-slim AS final
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y libboost-system-dev libhiredis0.14 libsqlite3-0 libssl-dev libsodium23 && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/api .
+
+EXPOSE 18080
+
+CMD ["./api"]
+            </code></pre>
+        </div>
+    </div>
+
+    <div class="file-block">
+        <div class="file-header"><code>docker-compose.yml</code></div>
+        <div class="file-content">
+            <p>The <code>docker-compose.yml</code> file now defines the C++ application and Redis services, with volumes for the SQLite database and logs, and a JWT secret.</p>
+            <pre><code class="language-yaml">
+# docker-compose.yml
+
+services:
+  cpp-api:
+    container_name: my_cpp_api
+    build: .
+    ports:
+      - "8081:18080"
+    restart: unless-stopped
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - JWT_SECRET=your-super-secret-key
+    volumes:
+      - ./database:/app/database
+      - ./logs:/app/logs
+
+  redis:
+    image: "redis:alpine"
+    container_name: my_redis
+    ports:
+      - "6380:6379"
+    restart: unless-stopped
+            </code></pre>
+        </div>
+    </div>
+
+    <h2>4. Building and Running the Application</h2>
+    <p>With all the files in place, open your terminal in the project's root directory and run the following command:</p>
+    <pre><code>docker-compose up --build</code></pre>
+    <p>Docker will now build the images and start the C++ API and Redis containers. The API is available at <code>http://localhost:8081</code>.</p>
+
+    <h2>5. API Endpoints Guide</h2>
+    <p>Here are the available endpoints and how to use them with <code>curl</code>.</p>
+
+    <h3>Authentication</h3>
+    <ul>
+        <li>
+            <strong>Register a new user</strong><br>
+            <code>POST /register</code><br>
+            <pre><code>curl -X POST -H "Content-Type: application/json" -d '{"name":"John Doe","email":"john.doe@example.com","password":"your-password"}' http://localhost:8081/register</code></pre>
+        </li>
+        <li>
+            <strong>Login as an existing user</strong><br>
+            <code>POST /login</code><br>
+            <pre><code>curl -X POST -H "Content-Type: application/json" -d '{"email":"john.doe@example.com","password":"your-password"}' http://localhost:8081/login</code></pre>
+        </li>
+    </ul>
+
+    <h3>Users (Protected)</h3>
+    <ul>
+        <li>
+            <strong>Get all users</strong><br>
+            <code>GET /users</code><br>
+            <pre><code>curl -H "Authorization: Bearer &lt;your-jwt&gt;" http://localhost:8081/users</code></pre>
+        </li>
+        <li>
+            <strong>Get a specific user</strong><br>
+            <code>GET /users/&lt;id&gt;</code><br>
+            <pre><code>curl -H "Authorization: Bearer &lt;your-jwt&gt;" http://localhost:8081/users/1</code></pre>
+        </li>
+        <li>
+            <strong>Update a user</strong><br>
+            <code>PUT /users/&lt;id&gt;</code><br>
+            <pre><code>curl -X PUT -H "Content-Type: application/json" -H "Authorization: Bearer &lt;your-jwt&gt;" -d '{"name":"Jane Doe"}' http://localhost:8081/users/1</code></pre>
+        </li>
+        <li>
+            <strong>Delete a user</strong><br>
+            <code>DELETE /users/&lt;id&gt;</code><br>
+            <pre><code>curl -X DELETE -H "Authorization: Bearer &lt;your-jwt&gt;" http://localhost:8081/users/1</code></pre>
+        </li>
+    </ul>
+
+    <h3>Message Queue</h3>
+    <ul>
+        <li>
+            <strong>Queue a message</strong><br>
+            <code>POST /messages</code><br>
+            <pre><code>curl -X POST -H "Content-Type: application/json" -d '{"message":"hello world"}' http://localhost:8081/messages</code></pre>
+        </li>
+        <li>
+            <strong>Retrieve a message</strong><br>
+            <code>GET /messages</code><br>
+            <pre><code>curl http://localhost:8081/messages</code></pre>
+        </li>
+    </ul>
+
+</body>
+</html>

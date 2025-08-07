@@ -1,7 +1,5 @@
 # docker-compose.yml
 
-#version: '3.8'
-
 services:
   # Define our API service
   cpp-api:
@@ -9,8 +7,30 @@ services:
     container_name: my_cpp_api
     # Build the image from the Dockerfile in the current directory
     build: .
-    # Map port 8080 on the host machine to port 18080 in the container
+    # Map port 8081 on the host machine to port 18080 in the container
     ports:
-      - "8080:18080"
+      - "8081:18080"
+    # Restart the container automatically if it stops
+    restart: unless-stopped
+    # Link this service to the Redis container
+    depends_on:
+      - redis
+    # Pass the Redis host and JWT secret to the application as an environment variable
+    environment:
+      - REDIS_HOST=redis
+      - JWT_SECRET=your-super-secret-key
+    # Mount a volume to persist the SQLite database and logs
+    volumes:
+      - ./database:/app/database
+      - ./logs:/app/logs
+
+  # Define the Redis service
+  redis:
+    # Use the official Redis image from Docker Hub
+    image: "redis:alpine"
+    container_name: my_redis
+    # Map the default Redis port
+    ports:
+      - "6380:6379"
     # Restart the container automatically if it stops
     restart: unless-stopped

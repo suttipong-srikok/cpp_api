@@ -1,44 +1,45 @@
-# C++ build artifacts
+# Binaries for programs and libraries
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Object files
+*.o
+*.obj
+
+# Build directories
 build/
 bin/
-*.o
-*.a
-*.so
-*.dll
-*.exe
-*.out
-api
-
-# CMake files
-CMakeCache.txt
-CMakeFiles/
-cmake_install.cmake
-Makefile
-install_manifest.txt
-
-# Dependency directories
-Crow/
-
-# Docker
-docker-compose.override.yml
 
 # IDE and editor files
 .vscode/
 .idea/
-*.suo
-*.user
-*.sln
-*.vcxproj
-*.vcxproj.filters
+*.swp
+*.bak
+*~
 
-# OS-generated files
+# Logs and databases
+logs/
+database/
+
+# Dependency directories
+node_modules/
+vendor/
+
+# Environment variables
+.env
+.env.*
+
+# Test and coverage reports
+coverage/
+.nyc_output/
+
+# Package manager files
+package-lock.json
+yarn.lock
+npm-debug.log*
+
+# OS generated files
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
-
-# Log files
-*.log

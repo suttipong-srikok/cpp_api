@@ -1,6 +1,6 @@
-# C++ REST API with Crow
+# C++ REST API with Crow, SQLite, Redis, spdlog, and JWT
 
-This is a simple C++ REST API built using the [Crow](https://github.com/CrowCpp/Crow) micro-framework. The application is containerized using Docker and provides full CRUD (Create, Read, Update, Delete) functionality for managing users.
+This is a simple C++ REST API built using the [Crow](https://github.com/CrowCpp/Crow) micro-framework, backed by a SQLite database for persistent storage, Redis for caching and message queuing, [spdlog](https://github.com/gabime/spdlog) for structured logging, and [jwt-cpp](https://github.com/Thalhammer/jwt-cpp) for JWT-based authentication. The application is containerized using Docker and provides full CRUD (Create, Read, Update, Delete) functionality for managing users.
 
 ## Getting Started
 
@@ -24,35 +24,55 @@ This is a simple C++ REST API built using the [Crow](https://github.com/CrowCpp/
     docker-compose up --build
     ```
 
-    This command will build the Docker image and start the container. The API will be available at `http://localhost:18080`.
+    This command will build the Docker images and start the containers for the C++ application and the Redis server. The API will be available at `http://localhost:8081`.
 
 ## API Endpoints
 
-### Users
+### Authentication
 
-*   **`POST /users`**: Create a new user.
+*   **`POST /register`**: Register a new user.
 
     **Request Body:**
 
     ```json
     {
         "name": "John Doe",
-        "email": "john.doe@example.com"
+        "email": "john.doe@example.com",
+        "password": "your-password"
     }
     ```
 
     **Example using `curl`:**
 
     ```bash
-    curl -X POST -H "Content-Type: application/json" -d '{"name":"John Doe","email":"john.doe@example.com"}' http://localhost:18080/users
+    curl -X POST -H "Content-Type: application/json" -d '{"name":"John Doe","email":"john.doe@example.com","password":"your-password"}' http://localhost:8081/register
     ```
+
+*   **`POST /login`**: Login as an existing user.
+
+    **Request Body:**
+
+    ```json
+    {
+        "email": "john.doe@example.com",
+        "password": "your-password"
+    }
+    ```
+
+    **Example using `curl`:**
+
+    ```bash
+    curl -X POST -H "Content-Type: application/json" -d '{"email":"john.doe@example.com","password":"your-password"}' http://localhost:8081/login
+    ```
+
+### Users (Protected)
 
 *   **`GET /users`**: Get a list of all users.
 
     **Example using `curl`:**
 
     ```bash
-    curl http://localhost:18080/users
+    curl -H "Authorization: Bearer <your-jwt>" http://localhost:8081/users
     ```
 
 *   **`GET /users/<id>`**: Get a specific user by their ID.
@@ -60,7 +80,7 @@ This is a simple C++ REST API built using the [Crow](https://github.com/CrowCpp/
     **Example using `curl`:**
 
     ```bash
-    curl http://localhost:18080/users/1
+    curl -H "Authorization: Bearer <your-jwt>" http://localhost:8081/users/1
     ```
 
 *   **`PUT /users/<id>`**: Update a user's information.
@@ -77,7 +97,7 @@ This is a simple C++ REST API built using the [Crow](https://github.com/CrowCpp/
     **Example using `curl`:**
 
     ```bash
-    curl -X PUT -H "Content-Type: application/json" -d '{"name":"Jane Doe","email":"jane.doe@example.com"}' http://localhost:18080/users/1
+    curl -X PUT -H "Content-Type: application/json" -H "Authorization: Bearer <your-jwt>" -d '{"name":"Jane Doe","email":"jane.doe@example.com"}' http://localhost:8081/users/1
     ```
 
 *   **`DELETE /users/<id>`**: Delete a user.
@@ -85,7 +105,33 @@ This is a simple C++ REST API built using the [Crow](https://github.com/CrowCpp/
     **Example using `curl`:**
 
     ```bash
-    curl -X DELETE http://localhost:18080/users/1
+    curl -X DELETE -H "Authorization: Bearer <your-jwt>" http://localhost:8081/users/1
+    ```
+
+### Message Queue
+
+*   **`POST /messages`**: Add a message to the queue.
+
+    **Request Body:**
+
+    ```json
+    {
+        "message": "Your message here"
+    }
+    ```
+
+    **Example using `curl`:**
+
+    ```bash
+    curl -X POST -H "Content-Type: application/json" -d '{"message":"hello world"}' http://localhost:8081/messages
+    ```
+
+*   **`GET /messages`**: Retrieve a message from the queue.
+
+    **Example using `curl`:**
+
+    ```bash
+    curl http://localhost:8081/messages
     ```
 
 ## Project Structure
@@ -104,22 +150,9 @@ This is a simple C++ REST API built using the [Crow](https://github.com/CrowCpp/
 
 The `Dockerfile` is a multi-stage build.
 
-1.  **Builder Stage:** This stage uses the `gcc:latest` image to build the C++ application. It clones the Crow repository and compiles the application.
-2.  **Final Stage:** This stage uses a minimal `debian:stable-slim` image and copies the compiled application from the builder stage. This results in a smaller final image.
+1.  **Builder Stage:** This stage uses the `gcc:latest` image to build the C++ application. It clones the Crow and spdlog repositories, installs the `hiredis`, `sqlite3`, and `libsodium` client libraries, and compiles the application.
+2.  **Final Stage:** This stage uses a minimal `debian:stable-slim` image and copies the compiled application and its runtime dependencies from the builder stage. This results in a smaller final image.
 
-## Changelog
-
-### `refactor: Use User struct for data model`
-
-Refactored the application to use a `User` struct instead of `crow::json::wvalue` to store data. This improves type safety and code clarity. Added a helper function to convert the `User` struct to JSON for API responses.
-
-### `feat: Initial commit of C++ REST API with Crow`
-
-This commit introduces a basic C++ REST API using the Crow micro-framework. The application is containerized with Docker and includes the necessary configuration for building and running.
-
-Key features:
-- A simple "Hello, World" endpoint at `/`.
-- A multi-stage Dockerfile for an optimized build.
-- A `docker-compose.yml` for easy startup.
-- A `.gitignore` file for C++ and Docker projects.
-- A `README.md` with setup and usage instructions.
+The `docker-compose.yml` file defines two services:
+*   `cpp-api`: The C++ application.
+*   `redis`: The Redis server.
